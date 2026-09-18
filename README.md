@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+HEAD
 # IoT Camera Capture System
 Aplikasi sederhana untuk mengakses dan mengontrol webcam
 menggunakan Python dan OpenCV.
@@ -21,7 +21,6 @@ menggunakan Python dan OpenCV.
 
 ## Keyboard Control
 | Key | Function |
-|-----|----------|
 | C | Capture one image |
 | B | Burst capture while holding the key |
 | Q | Exit application |
@@ -33,6 +32,6 @@ menggunakan Python dan OpenCV.
 ├── camera.py
 ├── requirements.txt
 └── README.md
-=======
+
 # wrapstation-fullstack-test
->>>>>>> 65f77878d7a8f98b64c7823078b56a24def9228d
+65f77878d7a8f98b64c7823078b56a24def9228d
