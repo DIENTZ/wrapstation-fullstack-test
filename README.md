@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # IoT Camera Capture System
 Aplikasi sederhana untuk mengakses dan mengontrol webcam
 menggunakan Python dan OpenCV.
@@ -32,3 +33,6 @@ menggunakan Python dan OpenCV.
 ├── camera.py
 ├── requirements.txt
 └── README.md
+=======
+# wrapstation-fullstack-test
+>>>>>>> 65f77878d7a8f98b64c7823078b56a24def9228d
