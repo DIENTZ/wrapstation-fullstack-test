@@ -1,6 +1,17 @@
 <?php
+
 use CodeIgniter\HTTP\Header;
 use CodeIgniter\CodeIgniter;
+
+/**
+ * Variables provided by CodeIgniter's exception handler.
+ *
+ * @var string $title
+ * @var \Throwable $exception
+ * @var string $file
+ * @var int $line
+ * @var array<int, mixed> $trace
+ */
 
 $errorId = uniqid('error', true);
 ?>
@@ -41,7 +52,11 @@ $errorId = uniqid('error', true);
 
     <!-- Source -->
     <div class="container">
-        <p><b><?= esc(clean_path($file)) ?></b> at line <b><?= esc($line) ?></b></p>
+<p>
+    <b><?= esc(clean_path($file)) ?></b>
+    at line
+    <b><?= esc(is_array($line) ? implode(', ', array_map('strval', $line)) : (string) $line) ?></b>
+</p>
 
         <?php if (is_file($file)) : ?>
             <div class="source">

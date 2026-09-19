@@ -5,12 +5,13 @@ namespace App\Controllers;
 use App\Models\ProductModel;
 use App\Models\TransactionModel;
 use App\Models\UserModel;
+use CodeIgniter\HTTP\RedirectResponse;
 
 class TransactionController extends BaseController
 {
-    protected $transactionModel;
-    protected $productModel;
-    protected $userModel;
+    protected TransactionModel $transactionModel;
+    protected ProductModel $productModel;
+    protected UserModel $userModel;
 
     public function __construct()
     {
@@ -22,163 +23,111 @@ class TransactionController extends BaseController
     public function index()
     {
         $data = [
-            'title' => 'Transactions',
+            'title' => 'Data Transaksi',
             'transactions' => $this->transactionModel
-                ->getAllWithDetails(),
+                ->select('transactions.*, users.name as user_name, products.name as product_name')
+                ->join('users', 'users.id = transactions.user_id')
+                ->join('products', 'products.id = transactions.product_id')
+                ->orderBy('transactions.id', 'DESC')
+                ->findAll(),
         ];
 
         return view('transactions/index', $data);
     }
 
-public function create()
-{
-    $data = [
-        'title' => 'Tambah Transaksi',
-        'users' => $this->userModel->findAll(),
-        'products' => $this->productModel->findAll(),
-    ];
-
-    return view('transactions/form', $data);
-}
-
-    public function store()
+    public function create()
     {
-        $rules = [
-            'user_id' => 'required|integer',
-            'product_id' => 'required|integer',
-            'payment_method' => 'required|in_list[Cash,Transfer,QRIS]',
-            'qty' => 'required|integer|greater_than[0]',
+        $data = [
+            'title' => 'Tambah Transaksi',
+            'users' => $this->userModel->findAll(),
+            'products' => $this->productModel->findAll(),
         ];
 
-        if (! $this->validate($rules)) {
-            return redirect()
-                ->back()
-                ->withInput()
-                ->with('errors', $this->validator->getErrors());
-        }
+        return view('transactions/form', $data);
+    }
 
+    public function store(): RedirectResponse
+    {
         $userId = (int) $this->request->getPost('user_id');
         $productId = (int) $this->request->getPost('product_id');
-        $qty = (int) $this->request->getPost('qty');
-        $paymentMethod = $this->request->getPost('payment_method');
+        $quantity = (int) $this->request->getPost('quantity');
 
-        $user = $this->userModel->find($userId);
         $product = $this->productModel->find($productId);
 
-        if (! $user) {
+        if (!$product) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', 'User tidak ditemukan.');
+                ->with('error', 'Produk tidak ditemukan.');
         }
 
-        if (! $product) {
+        if ($quantity <= 0) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('error', 'Product tidak ditemukan.');
+                ->with('error', 'Jumlah transaksi harus lebih dari 0.');
         }
 
-        if ($qty > (int) $product['qty_in_stock']) {
+        if ((int) $product['stock'] < $quantity) {
             return redirect()
                 ->back()
                 ->withInput()
                 ->with(
                     'error',
-                    'Stock tidak mencukupi. Stock tersedia: '
-                    . $product['qty_in_stock']
+                    'Stok produk tidak mencukupi. Stok tersedia: ' . $product['stock']
                 );
         }
 
-        $db = \Config\Database::connect();
+        $totalPrice = (float) $product['price'] * $quantity;
 
-        $db->transStart();
-
-        $this->transactionModel->insert([
+        $transactionData = [
             'user_id' => $userId,
             'product_id' => $productId,
-            'payment_method' => $paymentMethod,
-            'qty' => $qty,
-            'created_at' => date('Y-m-d H:i:s'),
-        ]);
+            'quantity' => $quantity,
+            'total_price' => $totalPrice,
+            'payment_method' => $this->request->getPost('payment_method'),
+        ];
 
-        $newStock = (int) $product['qty_in_stock'] - $qty;
+        $this->transactionModel->insert($transactionData);
+
+        $newStock = (int) $product['stock'] - $quantity;
 
         $this->productModel->update($productId, [
-            'qty_in_stock' => $newStock,
+            'stock' => $newStock,
         ]);
-
-        $db->transComplete();
-
-        if ($db->transStatus() === false) {
-            return redirect()
-                ->back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Transaksi gagal disimpan.'
-                );
-        }
 
         return redirect()
             ->to('/transactions')
-            ->with(
-                'success',
-                'Transaksi berhasil dibuat dan stock telah diperbarui.'
-            );
+            ->with('success', 'Transaksi berhasil ditambahkan.');
     }
 
-    public function delete($id)
+    public function delete(int $id): RedirectResponse
     {
         $transaction = $this->transactionModel->find($id);
 
-        if (! $transaction) {
+        if (!$transaction) {
             return redirect()
                 ->to('/transactions')
-                ->with(
-                    'error',
-                    'Transaksi tidak ditemukan.'
-                );
+                ->with('error', 'Transaksi tidak ditemukan.');
         }
 
-        $product = $this->productModel
-            ->find($transaction['product_id']);
-
-        $db = \Config\Database::connect();
-
-        $db->transStart();
+        $product = $this->productModel->find($transaction['product_id']);
 
         if ($product) {
-            $restoredStock =
-                (int) $product['qty_in_stock']
-                + (int) $transaction['qty'];
+            $restoredStock = (int) $product['stock'] + (int) $transaction['quantity'];
 
             $this->productModel->update(
                 $transaction['product_id'],
                 [
-                    'qty_in_stock' => $restoredStock,
+                    'stock' => $restoredStock,
                 ]
             );
         }
 
         $this->transactionModel->delete($id);
 
-        $db->transComplete();
-
-        if ($db->transStatus() === false) {
-            return redirect()
-                ->to('/transactions')
-                ->with(
-                    'error',
-                    'Transaksi gagal dihapus.'
-                );
-        }
-
         return redirect()
             ->to('/transactions')
-            ->with(
-                'success',
-                'Transaksi berhasil dihapus dan stock dikembalikan.'
-            );
+            ->with('success', 'Transaksi berhasil dihapus.');
     }
 }
