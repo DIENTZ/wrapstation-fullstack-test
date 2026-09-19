@@ -1,0 +1,23 @@
+# Virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# IDE
+.vscode/
+.idea/
+
+# Captured images
+captures/*.jpg
+captures/*.jpeg
+captures/*.png
+
+# Test files
+test_camera.py
+
+# OS
+.DS_Store
+Thumbs.db
