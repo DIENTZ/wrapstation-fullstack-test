@@ -1,0 +1,16 @@
+path: .
+
+train: image/train
+val: image/val
+test: image/test
+
+names:
+  0: Apple
+  1: Banana
+  2: Grapes
+  3: Kiwi
+  4: Mango
+  5: Orange
+  6: Pineapple
+  7: Sugerapple
+  8: Watermelon
