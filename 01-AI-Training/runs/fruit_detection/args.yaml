@@ -1,16 +1,16 @@
 task: detect
 mode: train
 model: yolo26n.pt
-data: D:\ALBUM CODING PROGRAMAN DYLAN\5. IoT & Embedded Systems\wrapstation-fullstack-test\01-AI-Training\dataset\data.yaml
-epochs: 10
+data: D:\ALBUM CODING PROGRAMAN DYLAN\5. IoT & Embedded Systems\wrapstation-fullstack-test\01-AI-Training\dataset-yolo\data.yaml
+epochs: 5
 time: null
-patience: 5
-batch: 8
-imgsz: 640
+patience: 3
+batch: 2
+imgsz: 320
 save: true
 save_period: -1
 cache: false
-device: ''
+device: cpu
 workers: 0
 project: D:\ALBUM CODING PROGRAMAN DYLAN\5. IoT & Embedded Systems\wrapstation-fullstack-test\01-AI-Training\runs
 name: fruit_detection
@@ -27,7 +27,7 @@ cos_lr: false
 close_mosaic: 10
 resume: false
 amp: true
-fraction: 1.0
+fraction: 0.25
 profile: false
 freeze: null
 multi_scale: 0.0

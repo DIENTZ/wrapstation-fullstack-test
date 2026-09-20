@@ -1,8 +1,8 @@
 path: .
 
-train: image/train
-val: image/val
-test: image/test
+train: images/train
+val: images/val
+test: images/test
 
 names:
   0: Apple
