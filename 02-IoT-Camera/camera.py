@@ -1,291 +1,534 @@
 import cv2
 import tkinter as tk
-
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
-
 from pathlib import Path
 from datetime import datetime
 
-# CAMERA CONFIGURATION
+# ============================================================
+# WRAPSTATION - IoT CAMERA CAPTURE SYSTEM
+# Modern split-panel UI
+#
+# Technical-test requirements:
+# - Live camera preview
+# - Keyboard key mapping for capture
+# - Captured images saved locally
+# - Simple, responsive UI
+# ============================================================
+
+WINDOW_WIDTH = 1050
+WINDOW_HEIGHT = 680
+MIN_WIDTH = 1050
+MIN_HEIGHT = 680
+
 CAMERA_INDEX = 0
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
 
-CAMERA_WIDTH = 1920
-CAMERA_HEIGHT = 1080
+# Preview is intentionally limited so it does not take the whole laptop screen.
+PREVIEW_WIDTH = 640
+PREVIEW_HEIGHT = 360
 
-# Optional camera parameters.
-# Support depends on the webcam/driver.
-SHUTTER_SPEED = -5
-ISO = 400
-
-# Burst capture interval in milliseconds.
-BURST_INTERVAL = 150
-
-# APPLICATION CONFIGURATION
-APP_TITLE = "IoT Camera Capture System"
-
-BASE_DIR = Path(__file__).resolve().parent
-CAPTURE_DIR = BASE_DIR / "captures"
-
+CAPTURE_DIR = Path(__file__).resolve().parent.parent / "captures"
 CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
 
-# CAMERA APPLICATION
-class CameraApp:
 
+class CameraApp:
     def __init__(self, root):
         self.root = root
-
-        self.root.title(APP_TITLE)
-        self.root.geometry("1100x800")
-        self.root.minsize(900, 700)
+        self.root.title("Wrapstation • IoT Camera Capture")
+        self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
+        self.root.minsize(MIN_WIDTH, MIN_HEIGHT)
+        self.root.resizable(True, True)
 
         self.camera = None
         self.running = False
+        self.last_frame = None
+        self.photo = None
 
         self.capture_count = 0
-        self.burst_active = False
+        self.capture_key = "SPACE"
 
-        self.last_frame = None
+        self.status_var = tk.StringVar(value="Connecting to camera...")
+        self.counter_var = tk.StringVar(value="0 photos")
+        self.key_var = tk.StringVar(value="SPACE")
+        self.device_var = tk.StringVar(value="Camera 0")
 
-        self.create_interface()
+        self.configure_style()
+        self.build_ui()
+        self.bind_keys()
+
+        self.root.protocol("WM_DELETE_WINDOW", self.close_app)
         self.start_camera()
 
-        # Keyboard mapping
-        self.root.bind("<KeyPress-c>", self.handle_capture_key)
-        self.root.bind("<KeyPress-C>", self.handle_capture_key)
+    # --------------------------------------------------------
+    # UI
+    # --------------------------------------------------------
+    def configure_style(self):
+        self.root.configure(bg="#0f172a")
 
-        self.root.bind("<KeyPress-b>", self.start_burst)
-        self.root.bind("<KeyPress-B>", self.start_burst)
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
 
-        self.root.bind("<KeyRelease-b>", self.stop_burst)
-        self.root.bind("<KeyRelease-B>", self.stop_burst)
-
-        self.root.bind("<KeyPress-q>", self.close_application)
-        self.root.bind("<KeyPress-Q>", self.close_application)
-
-        self.root.protocol("WM_DELETE_WINDOW", self.close_application)
-
-    # GUI
-    def create_interface(self):
-
-        # Main title
-        title = tk.Label(
-            self.root,
-            text="IoT Camera Capture System",
-            font=("Arial", 20, "bold")
+        style.configure(
+            "App.TFrame",
+            background="#0f172a"
+        )
+        style.configure(
+            "Card.TFrame",
+            background="#ffffff"
+        )
+        style.configure(
+            "Panel.TFrame",
+            background="#172033"
+        )
+        style.configure(
+            "Title.TLabel",
+            background="#0f172a",
+            foreground="#f8fafc",
+            font=("Segoe UI", 20, "bold")
+        )
+        style.configure(
+            "Subtitle.TLabel",
+            background="#0f172a",
+            foreground="#94a3b8",
+            font=("Segoe UI", 9)
+        )
+        style.configure(
+            "CardTitle.TLabel",
+            background="#172033",
+            foreground="#f8fafc",
+            font=("Segoe UI", 12, "bold")
+        )
+        style.configure(
+            "Normal.TLabel",
+            background="#172033",
+            foreground="#5b728a",
+            font=("Segoe UI", 9)
+        )
+        style.configure(
+            "Value.TLabel",
+            background="#172033",
+            foreground="#f8fafc",
+            font=("Segoe UI", 10, "bold")
+        )
+        style.configure(
+            "Primary.TButton",
+            font=("Segoe UI", 10, "bold"),
+            padding=(14, 10)
+        )
+        style.configure(
+            "Secondary.TButton",
+            font=("Segoe UI", 9),
+            padding=(12, 8)
+        )
+        style.configure(
+            "TCombobox",
+            padding=5
         )
 
-        title.pack(pady=10)
+    def build_ui(self):
+        outer = ttk.Frame(self.root, style="App.TFrame", padding=18)
+        outer.pack(fill="both", expand=True)
 
-        # Camera preview area
-        self.preview_label = tk.Label(
-            self.root,
-            text="Initializing camera...",
-            bg="black",
-            fg="white"
+        # Header
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 14))
+
+        ttk.Label(
+            header,
+            text="IoT Camera Capture",
+            style="Title.TLabel"
+        ).pack(anchor="w")
+
+        ttk.Label(
+            header,
+            text="Live preview and keyboard-controlled image capture",
+            style="Subtitle.TLabel"
+        ).pack(anchor="w", pady=(3, 0))
+
+        # Main split layout: camera LEFT, controls RIGHT.
+        content = ttk.Frame(outer, style="App.TFrame")
+        content.pack(fill="both", expand=True)
+
+        content.columnconfigure(0, weight=0)
+        content.columnconfigure(1, weight=0)
+        content.rowconfigure(0, weight=1)
+
+        # ----------------------------------------------------
+        # LEFT: camera preview
+        # ----------------------------------------------------
+        preview_card = ttk.Frame(
+            content,
+            style="Card.TFrame",
+            padding=12,
+            width=680,
+            height=500
         )
+        preview_card.grid(
+            row=0,
+            column=0,
+            sticky="nw",
+            padx=(0, 12)
+        )
+        preview_card.grid_propagate(False)
 
-        self.preview_label.pack(
-            padx=20,
-            pady=10,
-            fill=tk.BOTH,
+        preview_header = ttk.Frame(
+            preview_card,
+            style="Card.TFrame"
+        )
+        preview_header.pack(fill="x", pady=(0, 8))
+
+        ttk.Label(
+            preview_header,
+            text="LIVE PREVIEW",
+            style="CardTitle.TLabel"
+        ).pack(side="left")
+
+        self.live_badge = tk.Label(
+            preview_header,
+            text=" ● OFFLINE ",
+            bg="#7f1d1d",
+            fg="#fecaca",
+            font=("Segoe UI", 8, "bold"),
+            padx=6,
+            pady=3
+        )
+        self.live_badge.pack(side="right")
+
+        # Fixed initial preview dimensions. It will resize proportionally
+        # when the window itself is resized.
+        self.video_frame = tk.Frame(
+            preview_card,
+            width=PREVIEW_WIDTH,
+            height=PREVIEW_HEIGHT,
+            bg="#020617",
+            highlightthickness=1,
+            highlightbackground="#334155"
+        )
+        self.video_frame.pack(
+            fill="both",
+            expand=True
+        )
+        self.video_frame.pack_propagate(False)
+
+        self.video_label = tk.Label(
+            self.video_frame,
+            text="Starting camera...",
+            bg="#020617",
+            fg="#94a3b8",
+            font=("Segoe UI", 11),
+            justify="center"
+        )
+        self.video_label.pack(
+            fill="both",
             expand=True
         )
 
-        # Information frame
-        info_frame = tk.Frame(self.root)
-        info_frame.pack(fill=tk.X, padx=20, pady=5)
+        ttk.Label(
+            preview_card,
+            text="Preview is automatically scaled to fit this panel.",
+            style="Subtitle.TLabel"
+        ).pack(anchor="w", pady=(8, 0))
 
-        self.resolution_label = tk.Label(
-            info_frame,
-            text=f"Resolution: {CAMERA_WIDTH} x {CAMERA_HEIGHT}",
-            font=("Arial", 11)
+        # ----------------------------------------------------
+        # RIGHT: control panel
+        # ----------------------------------------------------
+        panel = ttk.Frame(
+            content,
+            style="Panel.TFrame",
+            padding=18,
+            width=315
+        )
+        panel.grid(
+            row=0,
+            column=1,
+            sticky="ns"
+        )
+        panel.grid_propagate(False)
+
+        ttk.Label(
+            panel,
+            text="CONTROL PANEL",
+            style="CardTitle.TLabel"
+        ).pack(anchor="w")
+
+        ttk.Label(
+            panel,
+            text="Camera",
+            style="Normal.TLabel"
+        ).pack(anchor="w", pady=(22, 2))
+
+        ttk.Label(
+            panel,
+            textvariable=self.device_var,
+            style="Value.TLabel"
+        ).pack(anchor="w")
+
+        ttk.Separator(panel).pack(fill="x", pady=14)
+
+        ttk.Label(
+            panel,
+            text="Capture Key",
+            style="Normal.TLabel"
+        ).pack(anchor="w", pady=(0, 5))
+
+        key_box = ttk.Combobox(
+            panel,
+            textvariable=self.key_var,
+            values=("SPACE", "ENTER"),
+            state="readonly",
+            width=18
+        )
+        key_box.pack(fill="x")
+        key_box.bind(
+            "<<ComboboxSelected>>",
+            self.change_capture_key
         )
 
-        self.resolution_label.pack(side=tk.LEFT)
-
-        self.status_label = tk.Label(
-            info_frame,
-            text="Status: Initializing...",
-            font=("Arial", 11)
-        )
-
-        self.status_label.pack(side=tk.RIGHT)
-
-        # Button frame
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(pady=10)
-
-        capture_button = tk.Button(
-            button_frame,
-            text="Capture",
-            width=15,
-            height=2,
+        self.capture_button = ttk.Button(
+            panel,
+            text="📷  CAPTURE PHOTO",
+            style="Primary.TButton",
             command=self.capture_image
         )
-
-        capture_button.pack(
-            side=tk.LEFT,
-            padx=5
+        self.capture_button.pack(
+            fill="x",
+            pady=(18, 8)
         )
 
-        exit_button = tk.Button(
-            button_frame,
-            text="Exit",
-            width=15,
-            height=2,
-            command=self.close_application
+        ttk.Label(
+            panel,
+            text="Keyboard shortcut",
+            style="Normal.TLabel"
+        ).pack(anchor="w")
+
+        ttk.Label(
+            panel,
+            text="Press SPACE or ENTER",
+            style="Value.TLabel"
+        ).pack(anchor="w", pady=(2, 0))
+
+        ttk.Separator(panel).pack(fill="x", pady=18)
+
+        ttk.Label(
+            panel,
+            text="CAPTURED",
+            style="Normal.TLabel"
+        ).pack(anchor="w")
+
+        ttk.Label(
+            panel,
+            textvariable=self.counter_var,
+            style="Value.TLabel"
+        ).pack(anchor="w", pady=(3, 0))
+
+        ttk.Separator(panel).pack(fill="x", pady=18)
+
+        ttk.Label(
+            panel,
+            text="STATUS",
+            style="Normal.TLabel"
+        ).pack(anchor="w")
+
+        self.status_label = ttk.Label(
+            panel,
+            textvariable=self.status_var,
+            style="Normal.TLabel",
+            wraplength=270,
+            justify="left"
+        )
+        self.status_label.pack(
+            anchor="w",
+            fill="x",
+            pady=(5, 0)
         )
 
-        exit_button.pack(
-            side=tk.LEFT,
-            padx=5
+        ttk.Button(
+            panel,
+            text="⏹  EXIT APPLICATION",
+            style="Secondary.TButton",
+            command=self.close_app
+        ).pack(
+            fill="x",
+            side="bottom",
+            pady=(12, 0)
         )
 
-        # Keyboard information
-        keyboard_info = tk.Label(
-            self.root,
-            text=(
-                "Keyboard: C = Capture | "
-                "B = Burst Capture | "
-                "Q = Exit"
-            ),
-            font=("Arial", 10)
+        ttk.Label(
+            panel,
+            text="ESC = Exit",
+            style="Subtitle.TLabel"
+        ).pack(
+            side="bottom",
+            anchor="w",
+            pady=(0, 8)
         )
 
-        keyboard_info.pack(pady=(5, 15))
+    # --------------------------------------------------------
+    # Keyboard mapping
+    # --------------------------------------------------------
+    def bind_keys(self):
+        self.root.bind("<Escape>", self.close_app)
+        self.root.bind("<space>", self.handle_capture)
+        self.root.bind("<Return>", self.handle_capture)
 
-    # START CAMERA
+    def change_capture_key(self, _event=None):
+        self.capture_key = self.key_var.get()
+        self.status_var.set(
+            f"Ready • Capture key: {self.capture_key}"
+        )
+
+    def handle_capture(self, event=None):
+        # Only the selected key triggers capture.
+        pressed = "ENTER" if event and event.keysym == "Return" else "SPACE"
+
+        if pressed == self.capture_key:
+            self.capture_image()
+            return "break"
+
+    # --------------------------------------------------------
+    # Camera
+    # --------------------------------------------------------
     def start_camera(self):
-
-        self.camera = cv2.VideoCapture(CAMERA_INDEX)
+        # CAP_DSHOW is generally reliable on Windows.
+        self.camera = cv2.VideoCapture(
+            CAMERA_INDEX,
+            cv2.CAP_DSHOW
+        )
 
         if not self.camera.isOpened():
+            self.camera.release()
+            self.camera = cv2.VideoCapture(CAMERA_INDEX)
 
-            self.status_label.config(
-                text="Status: Camera not available"
+        if not self.camera.isOpened():
+            self.running = False
+            self.live_badge.config(
+                text=" ● ERROR ",
+                bg="#7f1d1d",
+                fg="#fecaca"
             )
-
-            self.preview_label.config(
-                text="Camera could not be opened."
+            self.status_var.set(
+                "Camera could not be opened."
             )
+            self.video_label.config(
+                text=(
+                    "CAMERA NOT AVAILABLE\n\n"
+                    "Check camera permission,\n"
+                    "USB connection, or another app\n"
+                    "using the camera."
+                )
+            )
+            self.capture_button.state(["disabled"])
 
             messagebox.showerror(
                 "Camera Error",
-                (
-                    "Camera tidak dapat dibuka.\n\n"
-                    "Pastikan webcam tersedia dan tidak sedang "
-                    "digunakan aplikasi lain."
-                )
+                "Kamera tidak dapat dibuka.\n\n"
+                "Pastikan kamera tidak sedang digunakan "
+                "oleh aplikasi lain."
             )
-
             return
 
-        # Set camera resolution
         self.camera.set(
             cv2.CAP_PROP_FRAME_WIDTH,
             CAMERA_WIDTH
         )
-
         self.camera.set(
             cv2.CAP_PROP_FRAME_HEIGHT,
             CAMERA_HEIGHT
         )
 
-        # Optional shutter speed
-        if SHUTTER_SPEED is not None:
-
-            self.camera.set(
-                cv2.CAP_PROP_EXPOSURE,
-                SHUTTER_SPEED
-            )
-
-        # Optional ISO
-        if ISO is not None:
-
-            self.camera.set(
-                cv2.CAP_PROP_ISO_SPEED,
-                ISO
-            )
-
         self.running = True
-
-        self.status_label.config(
-            text="Status: Camera Active"
+        self.live_badge.config(
+            text=" ● LIVE ",
+            bg="#14532d",
+            fg="#bbf7d0"
+        )
+        self.status_var.set(
+            f"Ready • Capture key: {self.capture_key}"
         )
 
         self.update_frame()
 
-    # LIVE PREVIEW
     def update_frame(self):
-
-        if not self.running:
+        if not self.running or self.camera is None:
             return
 
-        ret, frame = self.camera.read()
+        ok, frame = self.camera.read()
 
-        if not ret:
-
-            self.status_label.config(
-                text="Status: Failed to read camera"
+        if not ok:
+            self.status_var.set(
+                "Camera frame could not be read."
             )
-
-            self.root.after(
-                100,
-                self.update_frame
-            )
-
+            self.root.after(100, self.update_frame)
             return
 
         self.last_frame = frame.copy()
 
-        # Convert BGR -> RGB
         frame_rgb = cv2.cvtColor(
             frame,
             cv2.COLOR_BGR2RGB
         )
 
-        # Convert OpenCV image to PIL
-        image = Image.fromarray(frame_rgb)
-
-        # Resize preview while maintaining aspect ratio
-        preview_width = 1000
-        preview_height = 600
-
-        image.thumbnail(
-            (preview_width, preview_height),
-            Image.Resampling.LANCZOS
+        # Fit inside the LEFT panel while preserving aspect ratio.
+        target_w = max(
+            self.video_label.winfo_width(),
+            PREVIEW_WIDTH
+        )
+        target_h = max(
+            self.video_label.winfo_height(),
+            PREVIEW_HEIGHT
         )
 
-        photo = ImageTk.PhotoImage(image=image)
+        scale = min(
+            target_w / frame_rgb.shape[1],
+            target_h / frame_rgb.shape[0]
+        )
 
-        self.preview_label.config(
-            image=photo,
+        # Do not enlarge a frame beyond its natural size.
+        scale = min(scale, 1.0)
+
+        new_w = max(
+            1,
+            int(frame_rgb.shape[1] * scale)
+        )
+        new_h = max(
+            1,
+            int(frame_rgb.shape[0] * scale)
+        )
+
+        resized = cv2.resize(
+            frame_rgb,
+            (new_w, new_h),
+            interpolation=cv2.INTER_AREA
+        )
+
+        image = Image.fromarray(resized)
+        self.photo = ImageTk.PhotoImage(image=image)
+
+        self.video_label.configure(
+            image=self.photo,
             text=""
         )
 
-        self.preview_label.image = photo
+        self.root.after(20, self.update_frame)
 
-        # Continue preview
-        self.root.after(
-            15,
-            self.update_frame
-        )
-
-    # CAPTURE IMAGE
+    # --------------------------------------------------------
+    # Capture
+    # --------------------------------------------------------
     def capture_image(self):
-
-        if self.last_frame is None:
-
-            self.status_label.config(
-                text="Status: No frame available"
+        if not self.running or self.last_frame is None:
+            self.status_var.set(
+                "Capture failed: camera frame unavailable."
             )
-
             return
 
         timestamp = datetime.now().strftime(
             "%Y%m%d_%H%M%S_%f"
-        )
+        )[:-3]
 
         filename = (
             CAPTURE_DIR /
@@ -294,92 +537,67 @@ class CameraApp:
 
         success = cv2.imwrite(
             str(filename),
-            self.last_frame
+            self.last_frame,
+            [cv2.IMWRITE_JPEG_QUALITY, 95]
         )
 
-        if success:
-
-            self.capture_count += 1
-
-            self.status_label.config(
-                text=(
-                    f"Captured: {filename.name} "
-                    f"({self.capture_count} files)"
-                )
+        if not success:
+            self.status_var.set(
+                "ERROR: Image could not be saved."
             )
-
-        else:
-
-            self.status_label.config(
-                text="Status: Failed to save image"
-            )
-
-    # ========================================================
-    # KEYBOARD CAPTURE
-    # ========================================================
-
-    def handle_capture_key(self, event):
-
-        # C = single capture
-        self.capture_image()
-
-    # ========================================================
-    # BURST CAPTURE
-    # ========================================================
-
-    def start_burst(self, event=None):
-
-        if self.burst_active:
             return
 
-        self.burst_active = True
+        if not filename.exists() or filename.stat().st_size <= 0:
+            self.status_var.set(
+                "ERROR: Capture file is empty."
+            )
+            return
 
-        self.status_label.config(
-            text="Status: Burst Capture Active"
+        self.capture_count += 1
+        self.counter_var.set(
+            f"{self.capture_count} "
+            f"{'photo' if self.capture_count == 1 else 'photos'}"
+        )
+        self.status_var.set(
+            f"Saved successfully: {filename.name}"
         )
 
-        self.burst_capture()
-
-    def burst_capture(self):
-
-        if not self.burst_active:
-            return
-
-        self.capture_image()
-
+        # Short visual feedback.
+        self.capture_button.state(["disabled"])
         self.root.after(
-            BURST_INTERVAL,
-            self.burst_capture
+            180,
+            lambda: self.capture_button.state(["!disabled"])
         )
 
-    def stop_burst(self, event=None):
-
-        self.burst_active = False
-
-        if self.running:
-
-            self.status_label.config(
-                text="Status: Camera Active"
-            )
-
-    # CLOSE APPLICATION
-    def close_application(self, event=None):
+    # --------------------------------------------------------
+    # Cleanup
+    # --------------------------------------------------------
+    def close_app(self, _event=None):
+        if not self.running and self.camera is None:
+            self.root.destroy()
+            return
 
         self.running = False
-        self.burst_active = False
 
         if self.camera is not None:
-
             self.camera.release()
             self.camera = None
 
+        self.photo = None
+
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
+
         self.root.destroy()
 
-# MAIN PROGRAM
-if __name__ == "__main__":
 
+def main():
     root = tk.Tk()
-
-    app = CameraApp(root)
-
+    CameraApp(root)
     root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

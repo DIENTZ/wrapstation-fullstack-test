@@ -1,0 +1,40 @@
+# ============================================================
+# WRAPSTATION - ROOT GITIGNORE
+# ============================================================
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# Python caches
+**/*.cache
+
+# AI generated training artifacts
+01-AI-Training/runs/
+01-AI-Training/dataset-backup/
+01-AI-Training/dataset-classification/
+01-AI-Training/yolo26n-cls.pt
+
+# Ultralytics generated files
+**/labels/*.cache
+**/*.pt.tmp
+
+# Camera captures - keep folder, ignore generated photos
+captures/*.jpg
+captures/*.jpeg
+captures/*.png
+
+# Camera test files
+test_camera.py
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

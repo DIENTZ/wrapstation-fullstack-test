@@ -1,18 +1,14 @@
-path: D:/ALBUM CODING PROGRAMAN DYLAN/5. IoT & Embedded Systems/wrapstation-fullstack-test/01-AI-Training/dataset-yolo
-
+path: D:\ALBUM CODING PROGRAMAN DYLAN\5. IoT & Embedded Systems\wrapstation-fullstack-test\01-AI-Training\dataset-yolo
 train: images/train
 val: images/valid
 test: images/test
-
 names:
   0: Apple
-  1: orange
-  2: Orange
-  3: Banana
+  1: Banana
+  2: Grapes
+  3: Kiwi
   4: Mango
-  5: Pineapple
-  6: kiwi
-  7: Kiwi
+  5: Orange
+  6: Pineapple
+  7: Sugerapple
   8: Watermelon
-  9: Grapes
-  10: Sugerapple
